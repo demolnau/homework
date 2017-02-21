@@ -1,0 +1,179 @@
+---
+title: "R Assignment Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+```{r}
+
+```
+
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+
+Inspecting fang_et_al_genotypes.txt
+
+```{r}
+getwd()
+setwd("C:/Users/Devin/Documents/GradSchool/IowaState/EEOB_546X/homework")
+getwd()
+genotype_data <- read.table("fang_et_al_genotypes.txt",header=TRUE,stringsAsFactors = FALSE)
+dim(genotype_data)
+colnames(genotype_data[1:10])
+row.names(genotype_data[1:10])
+```
+
+
+Inspecting snp_position.txt
+```{r}
+snp_position <- read.delim("snp_position.txt",header=TRUE, stringsAsFactors = FALSE)
+dim(snp_position)
+colnames(snp_position[1:10])
+row.names(snp_position[1:10])
+```
+
+Extract maize data from genotype_data.
+```{r}
+maize_genotype <- genotype_data[(genotype_data$Group == "ZMMIL") | (genotype_data$Group =="ZMMMR")| (genotype_data$Group == "ZMMLR"), ] 
+nrow(maize_genotype)
+ncol(maize_genotype)
+unique(maize_genotype$Group)
+```
+Extract Teosinte data from genotype_data.
+```{r}
+teosinte_genotype <- genotype_data[(genotype_data$Group == "ZMPBA") | (genotype_data$Group =="ZMPIL")| (genotype_data$Group == "ZMPJA"), ] 
+nrow(teosinte_genotype)
+ncol(teosinte_genotype)
+unique(teosinte_genotype$Group)
+```
+
+Transposing teosinte and maize genotype data
+```{r}
+transposed_teosinte_genotype <- t(teosinte_genotype)
+nrow(transposed_teosinte_genotype)
+ncol(transposed_teosinte_genotype)
+
+transposed_maize_genotype <- t(maize_genotype)
+nrow(transposed_maize_genotype)
+ncol(transposed_maize_genotype)
+
+#show the head of the first column for transposed_maize_genotype
+head(transposed_maize_genotype[,1])
+#remove the first three rows of tranposed_genotype as they are not important for merging
+transposed_maize_genotype_without_header <- transposed_maize_genotype[-(1:3),]
+#show the head of the new transposed_maize_genotype_without_header (without the first three rows of tranposed_maize_genotype)
+head (transposed_maize_genotype_without_header[,1])
+
+head(transposed_teosinte_genotype[,1])
+transposed_teosinte_genotype_without_header<-transposed_teosinte_genotype[-(1:3),]
+head(transposed_teosinte_genotype_without_header[,1])
+
+
+
+
+```
+Merge tranposed_maize_genotype_without_header with snp_position.txt
+```{r}
+transposed_maize_genotype_without_header<-cbind(colnames(genotype_data[4:ncol(genotype_data)]),transposed_maize_genotype_without_header)
+
+colnames(transposed_maize_genotype_without_header)[1]<-paste("SNP_ID")
+
+maize_genotype_snp<-merge(snp_position,transposed_maize_genotype_without_header, by.x="SNP_ID", by.y="SNP_ID")
+```
+
+Remove unwanted columns from maize_genotype_snp. We only want the SNP_ID, the chromosome, the position and the genotype data.(Columns 1,3,4,16 to end)
+```{r}
+#colnames(maize_genotype_snp[1:20])
+#colnames (maize_genotype_snp[c(1:20)])
+#colnames(maize_genotype_snp[c(1,3,4,16:ncol(maize_genotype_snp))])
+maize_genotype_snp<-maize_genotype_snp[c(1,3,4,16:ncol(maize_genotype_snp))]
+
+#maize_genotype_snp[,-c(1:3)]<lapply(maize_genotype_snp[,-c(1:3)],as.character)
+```
+Merge transposed_teosinte_genotype_without_header with snp_position.txt
+```{r}
+transposed_teosinte_genotype_without_header<-cbind(colnames(genotype_data[4:ncol(genotype_data)]),transposed_teosinte_genotype_without_header)
+
+colnames(transposed_teosinte_genotype_without_header)[1]<-paste("SNP_ID")
+
+teosinte_genotype_snp<-merge(snp_position,transposed_teosinte_genotype_without_header, by.x="SNP_ID", by.y="SNP_ID")
+```
+Remove unwanted columns from teosinte_genotype_snp.
+```{r}
+teosinte_genotype_snp<-teosinte_genotype_snp[c(1,3,4,16:ncol(teosinte_genotype_snp))]
+
+#sets columns 4:ncol(teosinte_genotype_snp) to character value
+#teosinte_genotype_snp[,-c(1:3)]<-lapply(teosinte_genotype_snp[,-c(1:3)], as.character)
+
+```
+
+Seperate maize_genotype_snp into individual chromosome files.
+```{r}
+unique(maize_genotype_snp[,2])
+for(i in 1:10){
+      temp_chromosome_df<-maize_genotype_snp[maize_genotype_snp[,2]==i,]
+      ordered_temp_chromosome_df<- temp_chromosome_df[order(as.numeric(temp_chromosome_df$Position)),]
+      write.csv(ordered_temp_chromosome_df, sprintf("maize_chromosome_%d.csv",i), row.names=FALSE)
+
+}
+testing<-read.csv("maize_chromosome_1.csv")
+```
+
+Sort maize_chromosome_%d by position (descending) with ?/? substituted for -/-
+```{r}
+for(i in 1:10){
+      temp_chromosome_df<-maize_genotype_snp[maize_genotype_snp[,2]==i,]
+      temp_chromosome_df[,-c(1:3)]<-lapply(temp_chromosome_df[,-c(1:3)],as.character)
+     
+      #replace "?/?" with "-/-"
+      temp_chromosome_df[temp_chromosome_df=="?/?"] <-"-/-"
+      
+      descending_order_temp_chromosome_df<- temp_chromosome_df[order(-(as.numeric(temp_chromosome_df$Position))),]
+      
+      write.csv(descending_order_temp_chromosome_df, sprintf("descending_order_maize_chromosome_%d.csv",i), row.names=FALSE)
+}
+descending_order_test<-read.csv("descending_order_maize_chromosome_1.csv")
+
+
+```
+
+Seperate teosinte_genotype_snp into individual chromosome files
+```{r}
+
+for(i in 1:10){
+      temp_t_chromosome_df<-teosinte_genotype_snp[teosinte_genotype_snp[,2]==i,]
+      
+      ordered_temp_t_chromosome_df<- temp_t_chromosome_df[order(as.numeric(temp_t_chromosome_df$Position)),]
+      
+      write.csv(ordered_temp_t_chromosome_df, sprintf("teosinte_chromosome_%d.csv",i), row.names=FALSE)
+      }
+
+```
+Sort teosinte_chromosome%d by position (descending) with ?/? substituted for -/-
+```{r}
+for(i in 1:10){
+  
+      temp_teosinte_chromosome_df<-teosinte_genotype_snp[teosinte_genotype_snp[,2]==i,]
+      temp_teosinte_chromosome_df[,-c(1:3)]<-lapply(temp_teosinte_chromosome_df[,-c(1:3)],as.character)
+      #replace "?/?" with "-/-"
+      temp_teosinte_chromosome_df[temp_teosinte_chromosome_df=="?/?"] <-"-/-"
+      
+      descending_order_temp_teosinte_chromosome_df<- temp_teosinte_chromosome_df[order(-(as.numeric(temp_teosinte_chromosome_df$Position))),]
+      
+      write.csv(descending_order_temp_teosinte_chromosome_df, sprintf("descending_order_teosinte_chromosome_%d.csv",i), row.names=FALSE)
+}
+descending_order_teosinte_test<-read.csv("descending_order_teosinte_chromosome_1.csv")
+
+
+```
+
+
