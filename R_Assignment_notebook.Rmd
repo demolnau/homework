@@ -121,7 +121,9 @@ Seperate maize_genotype_snp into individual chromosome files.
 unique(maize_genotype_snp[,2])
 for(i in 1:10){
       temp_chromosome_df<-maize_genotype_snp[maize_genotype_snp[,2]==i,]
+      
       ordered_temp_chromosome_df<- temp_chromosome_df[order(as.numeric(temp_chromosome_df$Position)),]
+      
       write.csv(ordered_temp_chromosome_df, sprintf("maize_chromosome_%d.csv",i), row.names=FALSE)
 
 }
@@ -175,5 +177,262 @@ descending_order_teosinte_test<-read.csv("descending_order_teosinte_chromosome_1
 
 
 ```
+Import the reshape2, dplyr and ggplot2 packages.
+```{r}
+install.packages("reshape2")
+install.packages("dplyr")
+install.packages("ggplot2")
 
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+
+```
+Plot the total number of SNPs in out dataset on each chromosome.
+```{r}
+#typeof(genotype_data)
+transposed_fang<-t(genotype_data)
+#unique(genotype_data$Group)
+
+transposed_fang<-as.data.frame(transposed_fang,row.names = FALSE)
+groups<-transposed_fang[3,]
+#typeof(groups)
+transposed_fang<-transposed_fang[-(1:3),]
+
+transposed_fang<-cbind(colnames(genotype_data[4:ncol(genotype_data)]),transposed_fang)#this adds the headers from the untransposed data back into a column form
+colnames(transposed_fang)[1]<-paste("SNP_ID")
+transposed_genotype_snp<-merge(snp_position,transposed_fang, by.x="SNP_ID", by.y="SNP_ID")
+dim(transposed_genotype_snp)
+dim(groups)
+transposed_genotype_snp<-transposed_genotype_snp[c(1,3,4,16:ncol(transposed_genotype_snp))]
+dim(transposed_genotype_snp)
+groups<-cbind(0,0,0,groups)
+colnames(groups)<-colnames(transposed_genotype_snp)
+transposed_genotype_snp<-rbind(groups,transposed_genotype_snp)
+groups_unique<-unique(genotype_data$Groups)
+snp_chromosome_count_df<-data.frame()
+for (i in 1:10){
+  temp_chromosome_df<-transposed_genotype_snp[transposed_genotype_snp[,2]==i,]
+  chromosome_count<-nrow(temp_chromosome_df)
+  chromosome_count<-cbind(i,chromosome_count)
+  snp_chromosome_count_df<-rbind(snp_chromosome_count_df, chromosome_count)
+}
+colnames(snp_chromosome_count_df)
+colnames(snp_chromosome_count_df)<-c("Chromosome","Number_of_SNPs")
+  colnames(snp_chromosome_count_df)
+
+ggplot(snp_chromosome_count_df) + geom_point(aes(x=Chromosome, y=Number_of_SNPs))+ ggtitle("Total number of SNPs on each chromosome")
+
+```
+How did groups contribute to the number of SNPs?
+```{r}
+ transposed_genotype_snp[,-c(1:3)]<-lapply(transposed_genotype_snp[,-c(1:3)],as.character)
+
+
+SNPs_per_group<-data.frame()
+groups_unique<-unique(genotype_data$Group)
+for (i in 1:length(groups_unique)){
+ temp_group_df<-transposed_genotype_snp[,transposed_genotype_snp[1,]== groups_unique[i]]
+  
+   #temp_group_df<-data.frame(transposed_genotype_snp[,transposed_genotype_snp[1,]== groups_unique[i]], stringsAsFactors = FALSE)
+   #temp_group_df[,-c(1:3)]<-lapply(temp_group_df[,-c(1:3)],as.character)
+  
+  group_count<-ncol(temp_group_df)
+  group_count<-cbind(groups_unique[i],group_count)
+  SNPs_per_group<-rbind(SNPs_per_group, group_count)
+}
+colnames(SNPs_per_group)
+colnames(SNPs_per_group)<-c("Group", "Number_of_SNPs")
+SNPs_per_group
+SNPs_per_group$Number_of_SNPs<-as.numeric(levels(SNPs_per_group$Number_of_SNPs))[SNPs_per_group$Number_of_SNPs]
+ggplot(SNPs_per_group, aes(x=Group, y=Number_of_SNPs))+geom_point()+theme(axis.text.x=element_text(angle=90)) +ggtitle("Number of SNPs by Group")
+
+```
+Missing Data and amount of heterozogosity and Sort by group and then by sample_ID
+```{r}
+genotype_data<-as.data.frame(genotype_data)
+homozygous<-as.data.frame(matrix(ncol=1,nrow=nrow(genotype_data))) #adds homozygous column
+total_NA<-as.data.frame(matrix(ncol=1,nrow=nrow(genotype_data)))
+heterozygous<-as.data.frame(matrix(ncol=1,nrow=nrow(genotype_data)))
+homozygous_df<-cbind(genotype_data[c(1:3)],homozygous,heterozygous,total_NA,genotype_data[c(4:ncol(genotype_data))])
+colnames(homozygous_df)[4]<-paste("Homozygous_percent")
+colnames(homozygous_df)[5]<-paste("Heterozygous_percent")
+colnames(homozygous_df)[6]<-paste("NA_percent")
+homozygous_df[homozygous_df=="?/?"] <- NA
+for (i in 1:nrow(homozygous_df))
+{
+  SNPs<-homozygous_df[i,c(7:ncol(homozygous_df))]
+  counter<-0
+  
+  for(j in 1:ncol(SNPs)){
+    if (is.na(SNPs[1,j])==FALSE){
+   if((SNPs[1,j] == "A/A") | (SNPs[1,j] == "T/T")| (SNPs[1,j] == "C/C") | (SNPs[1,j] == "G/G")){
+     counter<-counter +1;
+   }
+   }
+  }
+  homozygous_df[i,6]<-sum(is.na(SNPs))/ncol(SNPs)
+  homozygous_df[i,4]<-counter/ncol(SNPs)
+  homozygous_df[i,5]<-1-(homozygous_df[i,4])-(homozygous_df[i,6])
+}
+homozygous_df_sorted<-homozygous_df[order(homozygous_df$Group),]
+homozygous_df_sorted<-homozygous_df_sorted[order(homozygous_df_sorted$Sample_ID),]
+```
+
+Graph homozygousity, heterozygosity and NA_percentage
+```{r}
+
+temp_df<- melt(homozygous_df_sorted[c(1:6)], id= c("Sample_ID", "JG_OTU", "Group"))
+
+ggplot(temp_df, aes(x=temp_df$Sample_ID, y=temp_df$value, fill=temp_df$variable))+geom_bar(stat="identity")+ xlab("Sample_Id") + ylab("Proportion")+ ggtitle("Proportionality of homozygous,heterozygous and NA SNPs")+ theme(legend.title=element_blank())
+```
+Percentage of homozygous/heterozygous/NA for maize and teosinte
+```{r}
+genotype_data<-as.data.frame(genotype_data)
+
+homozygous_maize<-as.data.frame(matrix(ncol=1,nrow=nrow(genotype_data))) #adds homozygous column for maize
+percent_NA_maize<-as.data.frame(matrix(ncol=1,nrow=nrow(genotype_data)))
+heterozygous_maize<-as.data.frame(matrix(ncol=1,nrow=nrow(genotype_data)))
+
+homozygous_teosinte<-as.data.frame(matrix(ncol=1,nrow=nrow(genotype_data))) #adds homozygous column for teosinte
+percent_NA_teosinte<-as.data.frame(matrix(ncol=1,nrow=nrow(genotype_data)))
+heterozygous_teosinte<-as.data.frame(matrix(ncol=1,nrow=nrow(genotype_data)))
+
+homozygous_heterozygous_df_t_m<-cbind(genotype_data[c(1:3)],homozygous_maize,heterozygous_maize,percent_NA_maize, homozygous_teosinte, heterozygous_teosinte, percent_NA_teosinte, genotype_data[c(4:ncol(genotype_data))]) #makes the maize and teosinte homozygous, heterozygous, na percentile data frame
+
+
+colnames(homozygous_heterozygous_df_t_m)[4]<-paste("Homozygous_percent_maize")
+colnames(homozygous_heterozygous_df_t_m)[5]<-paste("Heterozygous_percent_maize")
+colnames(homozygous_heterozygous_df_t_m)[6]<-paste("NA_percent_maize")
+
+colnames(homozygous_heterozygous_df_t_m)[7]<-paste("Homozygous_percent_teosinte")
+colnames(homozygous_heterozygous_df_t_m)[8]<-paste("Heterozygous_percent_teosinte")
+colnames(homozygous_heterozygous_df_t_m)[9]<-paste("NA_percent_teosinte")
+homozygous_heterozygous_df_t_m[homozygous_heterozygous_df_t_m=="?/?"] <- NA
+
+
+for (i in 1:nrow(homozygous_heterozygous_df_t_m))
+{
+  SNPs<-homozygous_heterozygous_df_t_m[i,c(10:ncol(homozygous_heterozygous_df_t_m))]
+  counter_maize<-0
+  counter_teosinte<-0
+  NA_teosinte<-0
+  NA_maize<-0
+  for(j in 1:ncol(SNPs)){
+    if (is.na(SNPs[1,j])==TRUE){
+      if ((homozygous_heterozygous_df_t_m[i,3]=="ZMMIL")|(homozygous_heterozygous_df_t_m[i,3]=="ZMMMR")|(homozygous_heterozygous_df_t_m[i,3]=="ZMMLR"))
+      {
+        NA_maize=NA_maize+1
+      }
+      if ((homozygous_heterozygous_df_t_m[i,3]=="ZMPIL")|(homozygous_heterozygous_df_t_m[i,3]=="ZMPBA")|(homozygous_heterozygous_df_t_m[i,3]=="ZMPJA"))
+      {
+          NA_teosinte=NA_teosinte+1
+      }
+      }
+    if (is.na(SNPs[1,j])==FALSE){
+  #if(homozygous_heterozygous_df_t_m[(homozygous_heterozygous_df_t_m$Group == "ZMMIL") | (homozygous_heterozygous_df_t_m$Group =="ZMMMR")| (homozygous_heterozygous_df_t_m$Group == "ZMMLR"), ] )
+    
+    if ((homozygous_heterozygous_df_t_m[i,3]=="ZMMIL")||(homozygous_heterozygous_df_t_m[i,3]=="ZMMMR")||(homozygous_heterozygous_df_t_m[i,3]=="ZMMLR"))
+      {
+   if((SNPs[1,j] == "A/A") | (SNPs[1,j] == "T/T")| (SNPs[1,j] == "C/C") | (SNPs[1,j] == "G/G")){
+     counter_maize<-counter_maize +1;
+      
+    }
+    }
+    #if (homozygous_heterozygous_df_t_m[(homozygous_heterozygous_df_t_m$Group == "ZMPBA") | (homozygous_heterozygous_df_t_m$Group =="ZMPIL")| (homozygous_heterozygous_df_t_m$Group == "ZMPJA"), ] )
+      if ((homozygous_heterozygous_df_t_m[i,3]=="ZMPIL")||(homozygous_heterozygous_df_t_m[i,3]=="ZMPBA")||(homozygous_heterozygous_df_t_m[i,3]=="ZMPJA"))
+      {
+      if((SNPs[1,j] == "A/A") | (SNPs[1,j] == "T/T")| (SNPs[1,j] == "C/C") | (SNPs[1,j] == "G/G")){
+     counter_teosinte<-counter_teosinte +1;
+    
+   }
+        
+    }
+     }
+    }
+  homozygous_heterozygous_df_t_m[i,6]<-NA_maize/ncol(SNPs) #NA_percent_maize
+  homozygous_heterozygous_df_t_m[i,4]<-counter_maize/ncol(SNPs)#homozygous_maize
+  homozygous_heterozygous_df_t_m[i,5]<-1-(homozygous_heterozygous_df_t_m[i,4])-(homozygous_heterozygous_df_t_m[i,6]) #heterozygous_maize
+  
+  homozygous_heterozygous_df_t_m[i,9]<-NA_teosinte/ncol(SNPs) #NA_percent_teosinte
+  homozygous_heterozygous_df_t_m[i,7]<-counter_teosinte/ncol(SNPs)#homozygous_maize
+  homozygous_heterozygous_df_t_m[i,8]<-1-(homozygous_heterozygous_df_t_m[i,7])-(homozygous_heterozygous_df_t_m[i,9]) #heterozygous_teosinte
+  
+  
+}
+
+temp_df<- melt(homozygous_heterozygous_df_t_m_sorted[c(1:9)], id= c("Sample_ID", "JG_OTU", "Group"))
+
+ggplot(temp_df, aes(x=temp_df$Sample_ID, y=temp_df$value, fill=temp_df$variable))+geom_bar(stat="identity")+ xlab("Sample_Id") + ylab("Proportion")+ ggtitle("Proportionality of homozygous,heterozygous and NA SNPs in Maize and Teosinte")+ theme(legend.title=element_blank())
+```
+
+Homozygous/heterozygous/NA SNPs for maize
+```{r}
+maize_genotype<-as.data.frame(maize_genotype)
+homozygous<-as.data.frame(matrix(ncol=1,nrow=nrow(maize_genotype))) #adds homozygous column
+total_NA<-as.data.frame(matrix(ncol=1,nrow=nrow(maize_genotype)))
+heterozygous<-as.data.frame(matrix(ncol=1,nrow=nrow(maize_genotype)))
+homozygous_df<-cbind(maize_genotype[c(1:3)],homozygous,heterozygous,total_NA,maize_genotype[c(4:ncol(maize_genotype))])
+colnames(homozygous_df)[4]<-paste("Homozygous_percent")
+colnames(homozygous_df)[5]<-paste("Heterozygous_percent")
+colnames(homozygous_df)[6]<-paste("NA_percent")
+homozygous_df[homozygous_df=="?/?"] <- NA
+for (i in 1:nrow(homozygous_df))
+{
+  SNPs<-homozygous_df[i,c(7:ncol(homozygous_df))]
+  counter<-0
+  
+  for(j in 1:ncol(SNPs)){
+    if (is.na(SNPs[1,j])==FALSE){
+   if((SNPs[1,j] == "A/A") | (SNPs[1,j] == "T/T")| (SNPs[1,j] == "C/C") | (SNPs[1,j] == "G/G")){
+     counter<-counter +1;
+   }
+   }
+  }
+  homozygous_df[i,6]<-sum(is.na(SNPs))/ncol(SNPs)
+  homozygous_df[i,4]<-counter/ncol(SNPs)
+  homozygous_df[i,5]<-1-(homozygous_df[i,4])-(homozygous_df[i,6])
+}
+homozygous_df_sorted<-homozygous_df[order(homozygous_df$Group),]
+homozygous_df_sorted<-homozygous_df_sorted[order(homozygous_df_sorted$Sample_ID),]
+
+temp_df<- melt(homozygous_df_sorted[c(1:6)], id= c("Sample_ID", "JG_OTU", "Group"))
+
+ggplot(temp_df, aes(x=temp_df$Sample_ID, y=temp_df$value, fill=temp_df$variable))+geom_bar(stat="identity")+ xlab("Sample_Id") + ylab("Proportion")+ ggtitle("Proportionality of homozygous,heterozygous and NA SNPs in Maize")+ theme(legend.title=element_blank())
+```
+Homozygous/Heterozygous/NA SNPs in teosinte
+```{r}
+teosinte_genotype<-as.data.frame(teosinte_genotype)
+homozygous<-as.data.frame(matrix(ncol=1,nrow=nrow(teosinte_genotype))) #adds homozygous column
+total_NA<-as.data.frame(matrix(ncol=1,nrow=nrow(teosinte_genotype)))
+heterozygous<-as.data.frame(matrix(ncol=1,nrow=nrow(teosinte_genotype)))
+homozygous_df<-cbind(teosinte_genotype[c(1:3)],homozygous,heterozygous,total_NA,teosinte_genotype[c(4:ncol(teosinte_genotype))])
+colnames(homozygous_df)[4]<-paste("Homozygous_percent")
+colnames(homozygous_df)[5]<-paste("Heterozygous_percent")
+colnames(homozygous_df)[6]<-paste("NA_percent")
+homozygous_df[homozygous_df=="?/?"] <- NA
+for (i in 1:nrow(homozygous_df))
+{
+  SNPs<-homozygous_df[i,c(7:ncol(homozygous_df))]
+  counter<-0
+  
+  for(j in 1:ncol(SNPs)){
+    if (is.na(SNPs[1,j])==FALSE){
+   if((SNPs[1,j] == "A/A") | (SNPs[1,j] == "T/T")| (SNPs[1,j] == "C/C") | (SNPs[1,j] == "G/G")){
+     counter<-counter +1;
+   }
+   }
+  }
+  homozygous_df[i,6]<-sum(is.na(SNPs))/ncol(SNPs)
+  homozygous_df[i,4]<-counter/ncol(SNPs)
+  homozygous_df[i,5]<-1-(homozygous_df[i,4])-(homozygous_df[i,6])
+}
+homozygous_df_sorted<-homozygous_df[order(homozygous_df$Group),]
+homozygous_df_sorted<-homozygous_df_sorted[order(homozygous_df_sorted$Sample_ID),]
+
+temp_df<- melt(homozygous_df_sorted[c(1:6)], id= c("Sample_ID", "JG_OTU", "Group"))
+
+ggplot(temp_df, aes(x=temp_df$Sample_ID, y=temp_df$value, fill=temp_df$variable))+geom_bar(stat="identity")+ xlab("Sample_Id") + ylab("Proportion")+ ggtitle("Proportionality of homozygous,heterozygous and NA SNPs in Teosinte")+ theme(legend.title=element_blank())
+
+```
 
